@@ -117,7 +117,7 @@ CREATE TABLE `loan`
     borrowed_at DATETIME(3)  NOT NULL COMMENT '借出时间',
     due_at      DATETIME(3)  NOT NULL COMMENT '应还时间',
     returned_at DATETIME(3)  NULL COMMENT '归还时间（为空表示未归还）',
-    renew_count INT          NOT NULL DEFAULT 0 COMMENT '已续借次数（最多 2 次）',
+    renew_count INT          NOT NULL DEFAULT 0 COMMENT '已续借次数',
     note        VARCHAR(300) NULL COMMENT '备注',
     created_at  DATETIME(3)  NOT NULL,
     updated_at  DATETIME(3)  NOT NULL,
@@ -127,3 +127,32 @@ CREATE TABLE `loan`
     CONSTRAINT fk_loan_book FOREIGN KEY (book_id) REFERENCES `book` (id),
     CONSTRAINT fk_loan_member FOREIGN KEY (member_id) REFERENCES `member` (id)
 ) COMMENT = '借阅记录';
+
+-- 系统设置（key-value，值为 JSON）
+DROP TABLE IF EXISTS `system_config`;
+CREATE TABLE `system_config`
+(
+    `key`        VARCHAR(64)  NOT NULL PRIMARY KEY COMMENT '设置键：loan.rules / announcement / maintenance',
+    `value`      JSON         NOT NULL COMMENT '设置值（JSON）',
+    `updated_by` BIGINT       NULL COMMENT '最后修改人用户ID',
+    `updated_at` DATETIME(3)  NOT NULL COMMENT '最后修改时间'
+) COMMENT = '系统设置';
+
+-- 操作审计日志（只增不改）
+DROP TABLE IF EXISTS `audit_log`;
+CREATE TABLE `audit_log`
+(
+    id          BIGINT       NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    user_id     BIGINT       NOT NULL COMMENT '操作者用户ID',
+    user_email  VARCHAR(255) NOT NULL COMMENT '操作者邮箱快照',
+    action      VARCHAR(64)  NOT NULL COMMENT '动作，见 src/lib/audit.ts',
+    target_type VARCHAR(32)  NOT NULL COMMENT '目标类型：book/member/loan/setting',
+    target_id   VARCHAR(64)  NOT NULL COMMENT '目标ID或设置键',
+    `before`    JSON         NULL COMMENT '变更前快照',
+    `after`     JSON         NULL COMMENT '变更后快照',
+    ip          VARCHAR(45)  NULL COMMENT '客户端IP',
+    created_at  DATETIME(3)  NOT NULL COMMENT '发生时间',
+    INDEX idx_audit_log_action (action),
+    INDEX idx_audit_log_target (target_type, target_id),
+    INDEX idx_audit_log_created_at (created_at)
+) COMMENT = '操作审计日志';

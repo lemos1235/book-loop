@@ -1,8 +1,10 @@
 import { and, count, desc, eq, like, or, sql } from 'drizzle-orm';
-import { db } from './db';
+import { db, type DbExecutor } from './db';
 import { loan, member } from './db/schema';
 import type { MemberInput } from './validation';
 import { BusinessError, isUniqueConstraintError } from './errors';
+import { diffSnapshot, recordAudit } from './audit';
+import type { Actor } from './actor';
 import type { MemberOption, MemberStatusFilter, MemberView, Paginated } from '#lib/types';
 
 export interface MemberListQuery {
@@ -93,9 +95,9 @@ export function getMember(id: number): MemberView | null {
 }
 
 /** 生成 M-YYYY-0001 形式的读者编号，遇到占用则继续递增 */
-function nextMemberNo(): string {
+function nextMemberNo(executor: DbExecutor): string {
   const prefix = `M-${new Date().getFullYear()}-`;
-  const last = db
+  const last = executor
     .select({ memberNo: member.memberNo })
     .from(member)
     .where(like(member.memberNo, `${prefix}%`))
@@ -105,80 +107,137 @@ function nextMemberNo(): string {
   let sequence = last ? Number(last.memberNo.slice(prefix.length)) + 1 : 1;
   if (!Number.isFinite(sequence) || sequence < 1) sequence = 1;
   let candidate = `${prefix}${String(sequence).padStart(4, '0')}`;
-  while (db.select({ id: member.id }).from(member).where(eq(member.memberNo, candidate)).get()) {
+  while (
+    executor.select({ id: member.id }).from(member).where(eq(member.memberNo, candidate)).get()
+  ) {
     sequence += 1;
     candidate = `${prefix}${String(sequence).padStart(4, '0')}`;
   }
   return candidate;
 }
 
-export function createMember(input: MemberInput): number {
+type MemberRow = typeof member.$inferSelect;
+
+/** 审计用的业务快照，不含自增主键与时间戳 */
+function memberSnapshot(row: MemberRow): Record<string, unknown> {
+  return {
+    memberNo: row.memberNo,
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    status: row.status,
+    joinedAt: row.joinedAt.getTime(),
+    note: row.note,
+  };
+}
+
+export function createMember(actor: Actor, input: MemberInput): number {
   const now = new Date();
   try {
-    const created = db
-      .insert(member)
-      .values({
-        memberNo: input.memberNo || nextMemberNo(),
-        name: input.name,
-        phone: input.phone || null,
-        email: input.email || null,
-        note: input.note || null,
-        joinedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning({ id: member.id })
-      .get();
-    return created.id;
+    return db.transaction((tx) => {
+      const created = tx
+        .insert(member)
+        .values({
+          memberNo: input.memberNo || nextMemberNo(tx),
+          name: input.name,
+          phone: input.phone || null,
+          email: input.email || null,
+          note: input.note || null,
+          joinedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: member.id })
+        .get();
+
+      const row = tx.select().from(member).where(eq(member.id, created.id)).get();
+      recordAudit(tx, actor, {
+        action: 'member.create',
+        targetType: 'member',
+        targetId: created.id,
+        after: row ? memberSnapshot(row) : null,
+      });
+      return created.id;
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) throw new BusinessError('该读者编号已存在，请更换');
     throw error;
   }
 }
 
-export function updateMember(id: number, input: MemberInput): void {
-  const existing = db.select().from(member).where(eq(member.id, id)).get();
-  if (!existing) throw new BusinessError('读者不存在或已被删除');
+export function updateMember(actor: Actor, id: number, input: MemberInput): void {
   try {
-    db.update(member)
-      .set({
-        memberNo: input.memberNo || existing.memberNo,
-        name: input.name,
-        phone: input.phone || null,
-        email: input.email || null,
-        note: input.note || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(member.id, id))
-      .run();
+    db.transaction((tx) => {
+      const existing = tx.select().from(member).where(eq(member.id, id)).get();
+      if (!existing) throw new BusinessError('读者不存在或已被删除');
+
+      tx.update(member)
+        .set({
+          memberNo: input.memberNo || existing.memberNo,
+          name: input.name,
+          phone: input.phone || null,
+          email: input.email || null,
+          note: input.note || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(member.id, id))
+        .run();
+
+      const after = tx.select().from(member).where(eq(member.id, id)).get();
+      if (!after) throw new BusinessError('读者信息读取失败');
+      const diff = diffSnapshot(memberSnapshot(existing), memberSnapshot(after));
+      recordAudit(tx, actor, {
+        action: 'member.update',
+        targetType: 'member',
+        targetId: id,
+        ...diff,
+      });
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) throw new BusinessError('该读者编号已存在，请更换');
     throw error;
   }
 }
 
-export function toggleMemberStatus(id: number): void {
-  const existing = db.select().from(member).where(eq(member.id, id)).get();
-  if (!existing) throw new BusinessError('读者不存在或已被删除');
-  db.update(member)
-    .set({
-      status: existing.status === 'active' ? 'suspended' : 'active',
-      updatedAt: new Date(),
-    })
-    .where(eq(member.id, id))
-    .run();
+export function toggleMemberStatus(actor: Actor, id: number): void {
+  db.transaction((tx) => {
+    const existing = tx.select().from(member).where(eq(member.id, id)).get();
+    if (!existing) throw new BusinessError('读者不存在或已被删除');
+
+    const status = existing.status === 'active' ? 'suspended' : 'active';
+    tx.update(member).set({ status, updatedAt: new Date() }).where(eq(member.id, id)).run();
+    recordAudit(tx, actor, {
+      action: 'member.status',
+      targetType: 'member',
+      targetId: id,
+      before: { status: existing.status },
+      after: { status },
+    });
+  });
 }
 
-export function deleteMember(id: number): void {
-  const history = db
-    .select({ value: count() })
-    .from(loan)
-    .where(eq(loan.memberId, id))
-    .get()?.value;
-  if (history) {
-    throw new BusinessError('该读者已有借阅记录，无法删除；如需禁止借阅请改为停用');
-  }
-  db.delete(member).where(eq(member.id, id)).run();
+export function deleteMember(actor: Actor, id: number): void {
+  db.transaction((tx) => {
+    const history = tx
+      .select({ value: count() })
+      .from(loan)
+      .where(eq(loan.memberId, id))
+      .get()?.value;
+    if (history) {
+      throw new BusinessError('该读者已有借阅记录，无法删除；如需禁止借阅请改为停用');
+    }
+
+    const existing = tx.select().from(member).where(eq(member.id, id)).get();
+    if (!existing) throw new BusinessError('读者不存在或已被删除');
+
+    tx.delete(member).where(eq(member.id, id)).run();
+    recordAudit(tx, actor, {
+      action: 'member.delete',
+      targetType: 'member',
+      targetId: id,
+      before: memberSnapshot(existing),
+    });
+  });
 }
 
 /** 新建借阅弹窗用的读者选项：只列状态正常的读者 */

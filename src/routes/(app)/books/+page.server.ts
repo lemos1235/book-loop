@@ -1,4 +1,5 @@
 import { fail } from '@sveltejs/kit';
+import { getActor } from '#lib/server/actor';
 import { createBook, deleteBook, listBooks, toggleBookStatus, updateBook } from '#lib/server/books';
 import { toUserMessage } from '#lib/server/errors';
 import { readEnum, readKeyword, readPaging } from '#lib/server/params';
@@ -22,40 +23,44 @@ export const load: PageServerLoad = ({ url }) => {
 };
 
 export const actions: Actions = {
-  create: async ({ request }) => {
+  create: async (event) => {
+    const actor = getActor(event);
     try {
-      createBook(parseBookForm(await request.formData()));
+      createBook(actor, parseBookForm(await event.request.formData()));
       return { ok: true, message: '图书已添加' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }
   },
 
-  update: async ({ request }) => {
+  update: async (event) => {
+    const actor = getActor(event);
     try {
-      const formData = await request.formData();
+      const formData = await event.request.formData();
       const id = parseId(formData);
-      updateBook(id, parseBookForm(formData));
+      updateBook(actor, id, parseBookForm(formData));
       return { ok: true, message: '图书信息已更新' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }
   },
 
-  toggle: async ({ request }) => {
+  toggle: async (event) => {
+    const actor = getActor(event);
     try {
-      const id = parseId(await request.formData());
-      toggleBookStatus(id);
+      const id = parseId(await event.request.formData());
+      toggleBookStatus(actor, id);
       return { ok: true, message: '图书状态已更新' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }
   },
 
-  delete: async ({ request }) => {
+  delete: async (event) => {
+    const actor = getActor(event);
     try {
-      const id = parseId(await request.formData());
-      deleteBook(id);
+      const id = parseId(await event.request.formData());
+      deleteBook(actor, id);
       return { ok: true, message: '图书已删除' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });

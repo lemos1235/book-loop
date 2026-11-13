@@ -1,7 +1,9 @@
 import { fail } from '@sveltejs/kit';
+import { getActor } from '#lib/server/actor';
 import { listBookOptions } from '#lib/server/books';
 import { toUserMessage } from '#lib/server/errors';
 import { addDays, formatDate, toDateInputValue } from '#lib/format';
+import { getLoanRules } from '#lib/server/settings';
 import {
   createLoan,
   getLoanCounts,
@@ -24,21 +26,24 @@ export const load: PageServerLoad = ({ url }) => {
     ...readPaging(url),
   };
   const result = listLoans(query);
+  const rules = getLoanRules();
   return {
     query: { ...query, page: result.page, pageSize: result.pageSize },
     ...result,
     counts: getLoanCounts(),
     bookOptions: listBookOptions(),
     memberOptions: listMemberOptions(),
-    defaultDueDate: toDateInputValue(addDays(new Date(), 30)),
+    rules,
+    defaultDueDate: toDateInputValue(addDays(new Date(), rules.defaultLoanDays)),
     now: Date.now(),
   };
 };
 
 export const actions: Actions = {
-  create: async ({ request }) => {
+  create: async (event) => {
+    const actor = getActor(event);
     try {
-      const loan = createLoan(parseLoanForm(await request.formData()));
+      const loan = createLoan(actor, parseLoanForm(await event.request.formData()));
       return {
         ok: true,
         message: `《${loan.bookTitle}》借阅登记成功，应还日期 ${formatDate(loan.dueAt)}`,
@@ -48,19 +53,21 @@ export const actions: Actions = {
     }
   },
 
-  return: async ({ request }) => {
+  return: async (event) => {
+    const actor = getActor(event);
     try {
-      const loan = returnLoan(parseId(await request.formData()));
+      const loan = returnLoan(actor, parseId(await event.request.formData()));
       return { ok: true, message: `《${loan.bookTitle}》已归还` };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }
   },
 
-  renew: async ({ request }) => {
+  renew: async (event) => {
+    const actor = getActor(event);
     try {
-      const loan = renewLoan(parseId(await request.formData()));
-      return { ok: true, message: renewResultMessage(loan) };
+      const loan = renewLoan(actor, parseId(await event.request.formData()));
+      return { ok: true, message: renewResultMessage(loan, getLoanRules().renewDays) };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }

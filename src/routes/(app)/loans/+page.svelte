@@ -76,29 +76,36 @@
           .all} 条
       </p>
     </div>
-    <Button size="sm" class="h-8 w-full px-3 text-xs sm:w-auto" onclick={() => (dialogOpen = true)}>
+    <Button
+      size="sm"
+      class="h-8 w-full px-3 text-xs sm:w-auto"
+      disabled={Boolean(data.notice?.maintenance)}
+      title={data.notice?.maintenance ? '维护模式暂停借出' : undefined}
+      onclick={() => (dialogOpen = true)}>
       <Plus class="size-4" />
       登记借阅
     </Button>
   </div>
 
   <div class="flex flex-wrap items-center gap-2">
-    <div class="flex rounded-lg border bg-card p-0.5 shadow-xs">
+    <div
+      class="inline-flex items-center gap-0.5 rounded-xl border border-border/70 bg-card p-1 shadow-xs">
       {#each STATUS_TABS as tab (tab.value)}
         {@const active = data.query.status === tab.value}
         <Button
           variant="ghost"
           size="sm"
-          class="h-7 gap-1.5 rounded-md px-3 text-xs font-medium {active
-            ? 'bg-brand-900 text-white hover:bg-brand-900 hover:text-white'
-            : 'text-muted-foreground hover:text-foreground'}"
+          class="h-7 gap-1.5 rounded-md px-3 text-xs font-medium transition-colors {active
+            ? 'bg-brand-100 text-brand-800 hover:bg-brand-100 hover:text-brand-800'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
           onclick={() => navigate({ status: tab.value === 'all' ? null : tab.value })}>
           {tab.label}
           <span
-            class="rounded-full px-1.5 py-px text-[10px] tabular-nums {active
-              ? 'bg-white/20 text-white'
-              : tab.value === 'overdue' && tabCount(tab.value) > 0
-                ? 'bg-red-50 text-red-600'
+            class="rounded-full px-1.5 py-px text-[10px] tabular-nums {tab.value === 'overdue' &&
+            tabCount(tab.value) > 0
+              ? 'bg-red-50 text-red-600'
+              : active
+                ? 'bg-brand-200/60 text-brand-800'
                 : 'bg-muted text-muted-foreground'}">
             {tabCount(tab.value)}
           </span>
@@ -202,12 +209,16 @@
                   variant="ghost"
                   size="sm"
                   class="h-7 px-2 text-[11px] text-muted-foreground"
-                  disabled={row.status === 'overdue' || row.renewCount >= 2}
-                  title={row.status === 'overdue'
-                    ? '逾期记录不能续借'
-                    : row.renewCount >= 2
-                      ? '已达最大续借次数'
-                      : '续借 14 天'}>
+                  disabled={Boolean(data.notice?.maintenance) ||
+                    row.status === 'overdue' ||
+                    row.renewCount >= data.rules.maxRenewals}
+                  title={data.notice?.maintenance
+                    ? '维护模式暂停续借'
+                    : row.status === 'overdue'
+                      ? '逾期记录不能续借'
+                      : row.renewCount >= data.rules.maxRenewals
+                        ? '已达最大续借次数'
+                        : `续借 ${data.rules.renewDays} 天`}>
                   续借
                 </Button>
               </form>
@@ -275,12 +286,16 @@
                 variant="ghost"
                 size="sm"
                 class="h-8 px-3 text-xs text-muted-foreground"
-                disabled={loan.status === 'overdue' || loan.renewCount >= 2}
-                title={loan.status === 'overdue'
-                  ? '逾期记录不能续借'
-                  : loan.renewCount >= 2
-                    ? '已达最大续借次数'
-                    : '续借 14 天'}>
+                disabled={Boolean(data.notice?.maintenance) ||
+                  loan.status === 'overdue' ||
+                  loan.renewCount >= data.rules.maxRenewals}
+                title={data.notice?.maintenance
+                  ? '维护模式暂停续借'
+                  : loan.status === 'overdue'
+                    ? '逾期记录不能续借'
+                    : loan.renewCount >= data.rules.maxRenewals
+                      ? '已达最大续借次数'
+                      : `续借 ${data.rules.renewDays} 天`}>
                 续借
               </Button>
             </form>
@@ -318,4 +333,5 @@
   bind:open={dialogOpen}
   bookOptions={data.bookOptions}
   memberOptions={data.memberOptions}
-  defaultDueDate={data.defaultDueDate} />
+  defaultDueDate={data.defaultDueDate}
+  rules={data.rules} />

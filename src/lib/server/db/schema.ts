@@ -92,6 +92,41 @@ export const loan = sqliteTable(
   ],
 );
 
+/** 系统设置：每个设置项一行，value 为 JSON，结构与默认值见 server/settings.ts */
+export const systemConfig = sqliteTable('system_config', {
+  key: text('key').primaryKey(),
+  value: text('value', { mode: 'json' }).$type<unknown>().notNull(),
+  updatedBy: integer('updated_by'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/** 操作审计：与业务变更在同一事务写入，只增不改 */
+export const auditLog = sqliteTable(
+  'audit_log',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    userId: integer('user_id').notNull(),
+    /** 操作者邮箱快照，账号信息变化后仍可追溯 */
+    userEmail: text('user_email').notNull(),
+    /** 操作类型，见 server/audit.ts AUDIT_ACTIONS */
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id').notNull(),
+    /** 变更前后的字段快照 */
+    before: text('before', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+    after: text('after', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+    ip: text('ip'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    index('idx_audit_log_action').on(table.action),
+    index('idx_audit_log_target').on(table.targetType, table.targetId),
+    index('idx_audit_log_created_at').on(table.createdAt),
+  ],
+);
+
 export type BookRow = typeof book.$inferSelect;
 export type MemberRow = typeof member.$inferSelect;
 export type LoanRow = typeof loan.$inferSelect;
+export type SystemConfigRow = typeof systemConfig.$inferSelect;
+export type AuditLogRow = typeof auditLog.$inferSelect;

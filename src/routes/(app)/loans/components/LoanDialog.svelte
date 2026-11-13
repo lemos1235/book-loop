@@ -14,11 +14,13 @@
     bookOptions = [],
     memberOptions = [],
     defaultDueDate = '',
+    rules = { defaultLoanDays: 30, maxRenewals: 2, renewDays: 14 },
   }: {
     open?: boolean;
     bookOptions?: BookOption[];
     memberOptions?: MemberOption[];
     defaultDueDate?: string;
+    rules?: { defaultLoanDays: number; maxRenewals: number; renewDays: number };
   } = $props();
 
   let bookId = $state<string | undefined>(undefined);
@@ -137,7 +139,8 @@
             </Label>
             <Input id="loan-due" name="dueAt" type="date" bind:value={dueAt} required />
             <p class="mt-1 text-[11px] text-muted-foreground">
-              默认借期 30 天，到期前可续借 2 次。
+              默认借期 {rules.defaultLoanDays} 天，到期前可续借 {rules.maxRenewals} 次，每次
+              {rules.renewDays} 天。
             </p>
           </div>
 

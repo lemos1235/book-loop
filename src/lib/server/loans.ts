@@ -3,6 +3,9 @@ import { db } from './db';
 import { book, loan, member } from './db/schema';
 import type { LoanInput } from './validation';
 import { BusinessError } from './errors';
+import { recordAudit } from './audit';
+import type { Actor } from './actor';
+import { getLoanRules, getMaintenanceMessage, isMaintenanceEnabled } from './settings';
 import { addDays, formatDate, parseDueDate, startOfDay } from '#lib/format';
 import type { LoanCounts, LoanStatus, LoanStatusFilter, LoanView, Paginated } from '#lib/types';
 
@@ -12,9 +15,6 @@ export interface LoanListQuery {
   page: number;
   pageSize: number;
 }
-
-const RENEW_DAYS = 14;
-const MAX_RENEWALS = 2;
 
 function deriveStatus(returnedAt: Date | null, dueAt: Date, now: Date): LoanStatus {
   if (returnedAt) return 'returned';
@@ -119,6 +119,21 @@ export function listLoans(query: LoanListQuery): Paginated<LoanView> {
   return { rows, total, page, pageSize: query.pageSize };
 }
 
+/** 读者详情页：该读者的借阅记录，最近的在前 */
+export function listLoansByMember(memberId: number, limit = 50): LoanView[] {
+  const now = new Date();
+  return db
+    .select(loanColumns)
+    .from(loan)
+    .innerJoin(book, eq(loan.bookId, book.id))
+    .innerJoin(member, eq(loan.memberId, member.id))
+    .where(eq(loan.memberId, memberId))
+    .orderBy(desc(loan.borrowedAt), desc(loan.id))
+    .limit(limit)
+    .all()
+    .map((row) => toLoanView(row, now));
+}
+
 export function getLoanCounts(): LoanCounts {
   const now = new Date();
   const value = (condition: ReturnType<typeof statusCondition> | undefined) =>
@@ -132,8 +147,10 @@ export function getLoanCounts(): LoanCounts {
   };
 }
 
-/** 借出：校验库存、读者状态与逾期情况，并在同一事务内扣减可借数量 */
-export function createLoan(input: LoanInput): LoanView {
+/** 借出：校验维护状态、库存、读者状态与逾期情况，并在同一事务内扣减可借数量 */
+export function createLoan(actor: Actor, input: LoanInput): LoanView {
+  if (isMaintenanceEnabled()) throw new BusinessError(getMaintenanceMessage());
+  const rules = getLoanRules();
   const now = new Date();
   const dueAt = parseDueDate(input.dueAt);
   if (!dueAt) throw new BusinessError('应还日期格式不正确');
@@ -169,7 +186,9 @@ export function createLoan(input: LoanInput): LoanView {
       .from(loan)
       .where(and(eq(loan.memberId, input.memberId), isNull(loan.returnedAt), lt(loan.dueAt, now)))
       .get()?.value;
-    if (overdue) throw new BusinessError('该读者有逾期未还图书，请先归还后再借');
+    if (rules.blockOverdueBorrow && overdue) {
+      throw new BusinessError('该读者有逾期未还图书，请先归还后再借');
+    }
 
     const created = tx
       .insert(loan)
@@ -190,6 +209,18 @@ export function createLoan(input: LoanInput): LoanView {
       .where(eq(book.id, input.bookId))
       .run();
 
+    recordAudit(tx, actor, {
+      action: 'loan.create',
+      targetType: 'loan',
+      targetId: created.id,
+      after: {
+        bookId: input.bookId,
+        memberId: input.memberId,
+        dueAt: dueAt.getTime(),
+        note: input.note || null,
+      },
+    });
+
     const row = tx
       .select(loanColumns)
       .from(loan)
@@ -202,8 +233,8 @@ export function createLoan(input: LoanInput): LoanView {
   });
 }
 
-/** 归还：写回归还时间并恢复库存（库存不超过馆藏总量） */
-export function returnLoan(id: number): LoanView {
+/** 归还：写回归还时间并恢复库存（库存不超过馆藏总量）；维护模式下仍然允许 */
+export function returnLoan(actor: Actor, id: number): LoanView {
   const now = new Date();
   return db.transaction((tx) => {
     const existing = tx.select().from(loan).where(eq(loan.id, id)).get();
@@ -223,6 +254,14 @@ export function returnLoan(id: number): LoanView {
       .where(eq(book.id, existing.bookId))
       .run();
 
+    recordAudit(tx, actor, {
+      action: 'loan.return',
+      targetType: 'loan',
+      targetId: id,
+      before: { status: 'borrowed', dueAt: existing.dueAt.getTime() },
+      after: { status: 'returned', returnedAt: now.getTime() },
+    });
+
     const row = tx
       .select(loanColumns)
       .from(loan)
@@ -235,8 +274,10 @@ export function returnLoan(id: number): LoanView {
   });
 }
 
-/** 续借：未逾期时可续借，最长 2 次，每次 14 天 */
-export function renewLoan(id: number): LoanView {
+/** 续借：未逾期时可续借，次数与每次天数由系统设置决定 */
+export function renewLoan(actor: Actor, id: number): LoanView {
+  if (isMaintenanceEnabled()) throw new BusinessError(getMaintenanceMessage());
+  const rules = getLoanRules();
   const now = new Date();
   return db.transaction((tx) => {
     const existing = tx.select().from(loan).where(eq(loan.id, id)).get();
@@ -245,15 +286,23 @@ export function renewLoan(id: number): LoanView {
     if (existing.dueAt.getTime() < now.getTime()) {
       throw new BusinessError('该借阅已逾期，无法续借，请先归还');
     }
-    if (existing.renewCount >= MAX_RENEWALS) {
-      throw new BusinessError(`最多可续借 ${MAX_RENEWALS} 次`);
+    if (existing.renewCount >= rules.maxRenewals) {
+      throw new BusinessError(`最多可续借 ${rules.maxRenewals} 次`);
     }
 
-    const nextDueAt = addDays(existing.dueAt, RENEW_DAYS);
+    const nextDueAt = addDays(existing.dueAt, rules.renewDays);
     tx.update(loan)
       .set({ dueAt: nextDueAt, renewCount: existing.renewCount + 1, updatedAt: now })
       .where(eq(loan.id, id))
       .run();
+
+    recordAudit(tx, actor, {
+      action: 'loan.renew',
+      targetType: 'loan',
+      targetId: id,
+      before: { dueAt: existing.dueAt.getTime(), renewCount: existing.renewCount },
+      after: { dueAt: nextDueAt.getTime(), renewCount: existing.renewCount + 1 },
+    });
 
     const row = tx
       .select(loanColumns)
@@ -267,6 +316,6 @@ export function renewLoan(id: number): LoanView {
   });
 }
 
-export function renewResultMessage(view: LoanView): string {
-  return `已续借 ${RENEW_DAYS} 天，新的应还日期为 ${formatDate(view.dueAt)}`;
+export function renewResultMessage(view: LoanView, renewDays: number): string {
+  return `已续借 ${renewDays} 天，新的应还日期为 ${formatDate(view.dueAt)}`;
 }

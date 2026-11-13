@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { authClient } from '#lib/auth-client';
@@ -9,10 +10,16 @@
     ArrowLeftRight,
     BookOpen,
     ChevronDown,
+    Info,
     LayoutDashboard,
     Loader2,
     LogOut,
+    ScrollText,
+    Settings,
+    ShieldAlert,
+    TriangleAlert,
     Users,
+    X,
   } from '@lucide/svelte';
 
   let { data, children } = $props();
@@ -25,6 +32,8 @@
     { href: '/books', label: '图书管理', icon: BookOpen },
     { href: '/members', label: '读者管理', icon: Users },
     { href: '/loans', label: '借阅管理', icon: ArrowLeftRight },
+    { href: '/settings', label: '系统设置', icon: Settings },
+    { href: '/audit', label: '审计日志', icon: ScrollText },
   ];
 
   const PAGE_TITLES: Record<string, string> = {
@@ -32,7 +41,31 @@
     '/books': '图书管理',
     '/members': '读者管理',
     '/loans': '借阅管理',
+    '/settings': '系统设置',
+    '/audit': '审计日志',
   };
+
+  const ANNOUNCEMENT_KEY = 'bookloop:announcement-dismissed';
+
+  let mounted = $state(false);
+  let dismissedVersion = $state(0);
+
+  onMount(() => {
+    mounted = true;
+    const raw = localStorage.getItem(ANNOUNCEMENT_KEY);
+    if (raw) dismissedVersion = Number(raw) || 0;
+  });
+
+  const announcement = $derived(data.notice.announcement);
+  const showAnnouncement = $derived(
+    mounted && announcement !== null && announcement.version !== dismissedVersion,
+  );
+
+  function dismissAnnouncement() {
+    if (!announcement) return;
+    dismissedVersion = announcement.version;
+    localStorage.setItem(ANNOUNCEMENT_KEY, String(announcement.version));
+  }
 
   const pathname = $derived(page.url.pathname);
   const pageTitle = $derived(PAGE_TITLES[pathname] ?? '书循');
@@ -132,13 +165,13 @@
   </div>
 </header>
 
-<!-- 栏目条：横向胶囊导航 -->
+<!-- 栏目条：移动端两行三列，桌面端横向胶囊导航 -->
 <nav
-  class="sticky top-16 z-30 h-12 w-full border-b bg-card/95 backdrop-blur-sm"
+  class="sticky top-16 z-30 w-full border-b bg-card/95 backdrop-blur-sm"
   aria-label="管理后台导航">
-  <div class="h-full w-full px-4 sm:px-6 lg:px-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8">
     <ul
-      class="grid h-full grid-cols-4 items-center gap-1 sm:flex sm:gap-1.5 [&::-webkit-scrollbar]:hidden">
+      class="grid grid-cols-3 items-center gap-1 py-1 sm:flex sm:h-12 sm:gap-1.5 [&::-webkit-scrollbar]:hidden">
       {#each NAV_ITEMS as item (item.href)}
         {@const active = isActive(item.href)}
         <li>
@@ -159,6 +192,41 @@
     </ul>
   </div>
 </nav>
+
+{#if showAnnouncement && announcement}
+  <div
+    role="status"
+    class="border-b px-4 py-2.5 sm:px-6 lg:px-8 {announcement.level === 'warning'
+      ? 'border-amber-200 bg-amber-50 text-amber-800'
+      : 'border-sky-200 bg-sky-50 text-sky-800'}">
+    <div class="flex items-start justify-between gap-3">
+      <div class="flex min-w-0 items-start gap-2">
+        {#if announcement.level === 'warning'}
+          <TriangleAlert class="mt-0.5 size-4 shrink-0" />
+        {:else}
+          <Info class="mt-0.5 size-4 shrink-0" />
+        {/if}
+        <p class="min-w-0 flex-1 text-xs leading-5 whitespace-pre-line">{announcement.message}</p>
+      </div>
+      <button
+        type="button"
+        aria-label="关闭公告"
+        class="shrink-0 cursor-pointer rounded p-0.5 transition-colors hover:bg-black/5"
+        onclick={dismissAnnouncement}>
+        <X class="size-3.5" />
+      </button>
+    </div>
+  </div>
+{/if}
+
+{#if data.notice.maintenance}
+  <div
+    role="alert"
+    class="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 sm:px-6 lg:px-8">
+    <ShieldAlert class="size-4 shrink-0" />
+    维护模式：{data.notice.maintenance.message}
+  </div>
+{/if}
 
 <main class="w-full px-4 py-6 sm:px-6 lg:px-8">
   {@render children()}

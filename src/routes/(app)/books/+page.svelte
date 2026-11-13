@@ -108,15 +108,16 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2">
-    <div class="flex rounded-lg border bg-card p-0.5 shadow-xs">
+    <div
+      class="inline-flex items-center gap-0.5 rounded-xl border border-border/70 bg-card p-1 shadow-xs">
       {#each STATUS_TABS as tab (tab.value)}
         {@const active = data.query.status === tab.value}
         <Button
           variant="ghost"
           size="sm"
-          class="h-7 rounded-md px-3 text-xs font-medium {active
-            ? 'bg-brand-900 text-white hover:bg-brand-900 hover:text-white'
-            : 'text-muted-foreground hover:text-foreground'}"
+          class="h-7 rounded-md px-3 text-xs font-medium transition-colors {active
+            ? 'bg-brand-100 text-brand-800 hover:bg-brand-100 hover:text-brand-800'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
           onclick={() => navigate({ status: tab.value === 'all' ? null : tab.value })}>
           {tab.label}
         </Button>

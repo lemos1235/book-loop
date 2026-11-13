@@ -1,4 +1,5 @@
 import { fail } from '@sveltejs/kit';
+import { getActor } from '#lib/server/actor';
 import {
   createMember,
   deleteMember,
@@ -27,40 +28,44 @@ export const load: PageServerLoad = ({ url }) => {
 };
 
 export const actions: Actions = {
-  create: async ({ request }) => {
+  create: async (event) => {
+    const actor = getActor(event);
     try {
-      createMember(parseMemberForm(await request.formData()));
+      createMember(actor, parseMemberForm(await event.request.formData()));
       return { ok: true, message: '读者已添加' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }
   },
 
-  update: async ({ request }) => {
+  update: async (event) => {
+    const actor = getActor(event);
     try {
-      const formData = await request.formData();
+      const formData = await event.request.formData();
       const id = parseId(formData);
-      updateMember(id, parseMemberForm(formData));
+      updateMember(actor, id, parseMemberForm(formData));
       return { ok: true, message: '读者信息已更新' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }
   },
 
-  toggle: async ({ request }) => {
+  toggle: async (event) => {
+    const actor = getActor(event);
     try {
-      const id = parseId(await request.formData());
-      toggleMemberStatus(id);
+      const id = parseId(await event.request.formData());
+      toggleMemberStatus(actor, id);
       return { ok: true, message: '读者状态已更新' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });
     }
   },
 
-  delete: async ({ request }) => {
+  delete: async (event) => {
+    const actor = getActor(event);
     try {
-      const id = parseId(await request.formData());
-      deleteMember(id);
+      const id = parseId(await event.request.formData());
+      deleteMember(actor, id);
       return { ok: true, message: '读者已删除' };
     } catch (error) {
       return fail(400, { error: toUserMessage(error) });

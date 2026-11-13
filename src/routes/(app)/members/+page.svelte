@@ -107,15 +107,16 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2">
-    <div class="flex rounded-lg border bg-card p-0.5 shadow-xs">
+    <div
+      class="inline-flex items-center gap-0.5 rounded-xl border border-border/70 bg-card p-1 shadow-xs">
       {#each STATUS_TABS as tab (tab.value)}
         {@const active = data.query.status === tab.value}
         <Button
           variant="ghost"
           size="sm"
-          class="h-7 rounded-md px-3 text-xs font-medium {active
-            ? 'bg-brand-900 text-white hover:bg-brand-900 hover:text-white'
-            : 'text-muted-foreground hover:text-foreground'}"
+          class="h-7 rounded-md px-3 text-xs font-medium transition-colors {active
+            ? 'bg-brand-100 text-brand-800 hover:bg-brand-100 hover:text-brand-800'
+            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}"
           onclick={() => navigate({ status: tab.value === 'all' ? null : tab.value })}>
           {tab.label}
         </Button>
@@ -158,7 +159,11 @@
       {#snippet cell({ row, column })}
         {#if column.key === 'member'}
           <div>
-            <p class="font-medium text-foreground">{row.name}</p>
+            <a
+              href="/members/{row.id}"
+              class="font-medium text-foreground transition-colors hover:text-primary hover:underline">
+              {row.name}
+            </a>
             <p class="mt-0.5 font-mono text-[11px] text-muted-foreground">{row.memberNo}</p>
           </div>
         {:else if column.key === 'contact'}
@@ -233,7 +238,11 @@
       <Card class="gap-0 rounded-xl p-4 shadow-xs">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <p class="truncate text-sm font-medium text-foreground">{member.name}</p>
+            <a
+              href="/members/{member.id}"
+              class="block truncate text-sm font-medium text-foreground transition-colors hover:text-primary hover:underline">
+              {member.name}
+            </a>
             <p class="mt-0.5 font-mono text-[11px] text-muted-foreground">{member.memberNo}</p>
           </div>
           <StatusBadge

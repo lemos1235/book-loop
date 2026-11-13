@@ -3,6 +3,8 @@ import { db } from './db';
 import { book, loan } from './db/schema';
 import type { BookInput } from './validation';
 import { BusinessError, isUniqueConstraintError } from './errors';
+import { diffSnapshot, recordAudit } from './audit';
+import type { Actor } from './actor';
 import type { BookOption, BookStatusFilter, BookView, Paginated } from '#lib/types';
 
 export interface BookListQuery {
@@ -76,54 +78,95 @@ export function getBook(id: number): BookView | null {
   return row ? toBookView(row) : null;
 }
 
-export function createBook(input: BookInput): number {
+type BookRow = typeof book.$inferSelect;
+
+/** 审计用的业务快照，不含自增主键与时间戳 */
+function bookSnapshot(row: BookRow): Record<string, unknown> {
+  return {
+    title: row.title,
+    author: row.author,
+    isbn: row.isbn,
+    category: row.category,
+    publisher: row.publisher,
+    publishedYear: row.publishedYear,
+    totalCopies: row.totalCopies,
+    availableCopies: row.availableCopies,
+    shelf: row.shelf,
+    status: row.status,
+    note: row.note,
+  };
+}
+
+export function createBook(actor: Actor, input: BookInput): number {
   const now = new Date();
   try {
-    const created = db
-      .insert(book)
-      .values({
-        ...input,
-        isbn: input.isbn || null,
-        publisher: input.publisher || null,
-        shelf: input.shelf || null,
-        note: input.note || null,
-        publishedYear: input.publishedYear ?? null,
-        availableCopies: input.totalCopies,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning({ id: book.id })
-      .get();
-    return created.id;
+    return db.transaction((tx) => {
+      const created = tx
+        .insert(book)
+        .values({
+          ...input,
+          isbn: input.isbn || null,
+          publisher: input.publisher || null,
+          shelf: input.shelf || null,
+          note: input.note || null,
+          publishedYear: input.publishedYear ?? null,
+          availableCopies: input.totalCopies,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning({ id: book.id })
+        .get();
+
+      const row = tx.select().from(book).where(eq(book.id, created.id)).get();
+      recordAudit(tx, actor, {
+        action: 'book.create',
+        targetType: 'book',
+        targetId: created.id,
+        after: row ? bookSnapshot(row) : null,
+      });
+      return created.id;
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) throw new BusinessError('该 ISBN 已存在，请检查后重试');
     throw error;
   }
 }
 
-export function updateBook(id: number, input: BookInput): void {
-  const existing = db.select().from(book).where(eq(book.id, id)).get();
-  if (!existing) throw new BusinessError('图书不存在或已被删除');
-
-  const borrowed = existing.totalCopies - existing.availableCopies;
-  if (input.totalCopies < borrowed) {
-    throw new BusinessError(`当前有 ${borrowed} 册在借，馆藏总数不能少于 ${borrowed}`);
-  }
-
+export function updateBook(actor: Actor, id: number, input: BookInput): void {
   try {
-    db.update(book)
-      .set({
-        ...input,
-        isbn: input.isbn || null,
-        publisher: input.publisher || null,
-        shelf: input.shelf || null,
-        note: input.note || null,
-        publishedYear: input.publishedYear ?? null,
-        availableCopies: input.totalCopies - borrowed,
-        updatedAt: new Date(),
-      })
-      .where(eq(book.id, id))
-      .run();
+    db.transaction((tx) => {
+      const existing = tx.select().from(book).where(eq(book.id, id)).get();
+      if (!existing) throw new BusinessError('图书不存在或已被删除');
+
+      const borrowed = existing.totalCopies - existing.availableCopies;
+      if (input.totalCopies < borrowed) {
+        throw new BusinessError(`当前有 ${borrowed} 册在借，馆藏总数不能少于 ${borrowed}`);
+      }
+
+      tx.update(book)
+        .set({
+          ...input,
+          isbn: input.isbn || null,
+          publisher: input.publisher || null,
+          shelf: input.shelf || null,
+          note: input.note || null,
+          publishedYear: input.publishedYear ?? null,
+          availableCopies: input.totalCopies - borrowed,
+          updatedAt: new Date(),
+        })
+        .where(eq(book.id, id))
+        .run();
+
+      const after = tx.select().from(book).where(eq(book.id, id)).get();
+      if (!after) throw new BusinessError('图书信息读取失败');
+      const diff = diffSnapshot(bookSnapshot(existing), bookSnapshot(after));
+      recordAudit(tx, actor, {
+        action: 'book.update',
+        targetType: 'book',
+        targetId: id,
+        ...diff,
+      });
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) throw new BusinessError('该 ISBN 已存在，请检查后重试');
     throw error;
@@ -131,24 +174,45 @@ export function updateBook(id: number, input: BookInput): void {
 }
 
 /** 上架 / 下架切换；下架不影响已借出的记录 */
-export function toggleBookStatus(id: number): void {
-  const existing = db.select().from(book).where(eq(book.id, id)).get();
-  if (!existing) throw new BusinessError('图书不存在或已被删除');
-  db.update(book)
-    .set({
-      status: existing.status === 'active' ? 'archived' : 'active',
-      updatedAt: new Date(),
-    })
-    .where(eq(book.id, id))
-    .run();
+export function toggleBookStatus(actor: Actor, id: number): void {
+  db.transaction((tx) => {
+    const existing = tx.select().from(book).where(eq(book.id, id)).get();
+    if (!existing) throw new BusinessError('图书不存在或已被删除');
+
+    const status = existing.status === 'active' ? 'archived' : 'active';
+    tx.update(book).set({ status, updatedAt: new Date() }).where(eq(book.id, id)).run();
+    recordAudit(tx, actor, {
+      action: 'book.status',
+      targetType: 'book',
+      targetId: id,
+      before: { status: existing.status },
+      after: { status },
+    });
+  });
 }
 
-export function deleteBook(id: number): void {
-  const history = db.select({ value: count() }).from(loan).where(eq(loan.bookId, id)).get()?.value;
-  if (history) {
-    throw new BusinessError('该图书已有借阅记录，无法删除；如需停止流通请改为下架');
-  }
-  db.delete(book).where(eq(book.id, id)).run();
+export function deleteBook(actor: Actor, id: number): void {
+  db.transaction((tx) => {
+    const history = tx
+      .select({ value: count() })
+      .from(loan)
+      .where(eq(loan.bookId, id))
+      .get()?.value;
+    if (history) {
+      throw new BusinessError('该图书已有借阅记录，无法删除；如需停止流通请改为下架');
+    }
+
+    const existing = tx.select().from(book).where(eq(book.id, id)).get();
+    if (!existing) throw new BusinessError('图书不存在或已被删除');
+
+    tx.delete(book).where(eq(book.id, id)).run();
+    recordAudit(tx, actor, {
+      action: 'book.delete',
+      targetType: 'book',
+      targetId: id,
+      before: bookSnapshot(existing),
+    });
+  });
 }
 
 /** 新建借阅弹窗用的图书选项：只列在架图书，借完的置灰 */

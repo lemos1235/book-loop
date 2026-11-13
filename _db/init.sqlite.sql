@@ -94,6 +94,32 @@ CREATE TABLE `verification` (
 	`updated_at` integer NOT NULL
 );
 
+CREATE TABLE `system_config` (
+	`key` text PRIMARY KEY NOT NULL,
+	`value` text NOT NULL,
+	`updated_by` integer,
+	`updated_at` integer NOT NULL
+);
+
+CREATE TABLE `audit_log` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`user_id` integer NOT NULL,
+	`user_email` text NOT NULL,
+	`action` text NOT NULL,
+	`target_type` text NOT NULL,
+	`target_id` text NOT NULL,
+	`before` text,
+	`after` text,
+	`ip` text,
+	`created_at` integer NOT NULL
+);
+
+CREATE INDEX `idx_audit_log_action` ON `audit_log` (`action`);
+
+CREATE INDEX `idx_audit_log_created_at` ON `audit_log` (`created_at`);
+
+CREATE INDEX `idx_audit_log_target` ON `audit_log` (`target_type`,`target_id`);
+
 CREATE INDEX `idx_book_category` ON `book` (`category`);
 
 CREATE INDEX `idx_book_status` ON `book` (`status`);
