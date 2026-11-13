@@ -1,0 +1,153 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* 后台固定浅色：dark: 工具类只在显式挂 .dark 时生效，不跟随系统主题 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 松绿品牌色：主色 #3f7d5a，深色用于选中态 */
+@theme {
+  --color-brand-50: #f2f7f3;
+  --color-brand-100: #e4efe7;
+  --color-brand-200: #c9dfd0;
+  --color-brand-300: #a6c9b2;
+  --color-brand-400: #7fae90;
+  --color-brand-500: #5a9270;
+  --color-brand-600: #3f7d5a;
+  --color-brand-700: #34684b;
+  --color-brand-800: #2b543d;
+  --color-brand-900: #234534;
+  --color-brand-950: #122a1f;
+
+  --color-canvas: #f8faf9;
+
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+}
+
+:root {
+  --radius: 0.625rem;
+
+  --background: #f8faf9;
+  --foreground: #1c2b23;
+  --card: #ffffff;
+  --card-foreground: #1c2b23;
+  --popover: #ffffff;
+  --popover-foreground: #1c2b23;
+  --primary: #3f7d5a;
+  --primary-foreground: #ffffff;
+  --secondary: #eaf3ec;
+  --secondary-foreground: #234534;
+  --muted: #f1f4f2;
+  --muted-foreground: #6b7a70;
+  --accent: #eaf3ec;
+  --accent-foreground: #234534;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e1e8e3;
+  --input: #e1e8e3;
+  --ring: #9ec4ab;
+
+  --chart-1: #3f7d5a;
+  --chart-2: #8fb99d;
+  --chart-3: #b7d3c0;
+  --chart-4: #6b8f77;
+  --chart-5: #234534;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1c2b23;
+  --sidebar-primary: #3f7d5a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaf3ec;
+  --sidebar-accent-foreground: #234534;
+  --sidebar-border: #e1e8e3;
+  --sidebar-ring: #9ec4ab;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* 右侧滚动条常驻：内容不足一屏时也保留轨道，避免页面宽度跳动 */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+::selection {
+  background-color: #d6e9dc;
+  color: #234534;
+}
+
+/* 细滚动条，贴近后台工作台的观感 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cdd9d1 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #cdd9d1;
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #b8c8bd;
+}
