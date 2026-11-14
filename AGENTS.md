@@ -55,7 +55,7 @@ SvelteKit 2、Svelte 5（runes）、TypeScript、Tailwind CSS 4、shadcn-svelte�
 
 完成较大的功能或需求后提交一次，保持每次提交聚焦于一个完整变更。
 
-提交信息使用约定式提交格式 `<type>(<scope>): <中文简述>`，如 `feat(loans): 新增批量归还`。
+提交信息使用约定式提交格式 `<type>(<scope>): <英文简述>`，如 `feat(loans): add batch returns`。简述后空一行，描述具体改动的部分。
 
 ## 验证
 
