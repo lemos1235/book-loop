@@ -5,7 +5,7 @@
 ## 常用命令
 
 ```bash
-npm run dev              # 开发服务器（127.0.0.1:15174）
+npm run dev              # 开发服务器（localhost:15173）
 npm run build            # 生产构建；npm start 运行产物
 npm run check            # 类型检查
 npm run lint             # Prettier 检查；npm run format 自动修复

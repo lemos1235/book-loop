@@ -12,8 +12,8 @@ if (!secret) {
 }
 
 const trustedOrigins = [
-  'http://127.0.0.1:15174',
-  'http://localhost:15174',
+  'http://localhost:15173',
+  'http://127.0.0.1:15173',
   ...(env.ORIGIN ? [env.ORIGIN] : []),
 ];
 

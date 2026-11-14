@@ -30,14 +30,17 @@
 3. 保留登录、工作台、列表增删改查等通用骨架，把图书 / 读者 / 借阅替换成用户指定的业务；不保留无关模块。
 4. 为新项目重写 `README.md` 和 `AGENTS.md`，内容匹配新项目，不要照抄参考项目的业务描述。
 5. 配置 `.env.example`、数据库与种子脚本；沿用固定邮箱登录时，种子脚本创建默认管理员。
-6. 执行 `npm install`、`npm run format`、`npm run check`、`npm run db:push`、`npm run db:seed`，并启动一次开发服务器确认可访问；有报错就修复后重跑。
-7. 确认 `.gitignore` 已忽略 `node_modules`、`.env`、`*.db` 和构建产物，然后提交一次。
+6. 根据 `.env.example` 创建 `.env`，为 `BETTER_AUTH_SECRET` 生成至少 32 位的随机字符串；`.env` 不提交。
+7. 执行 `npm install`、`npm run format`、`npm run check`、`npm run db:push`、`npm run db:seed`，并启动一次开发服务器确认可访问；有报错就修复后重跑。
+8. 从参考项目复制 `.claude/skills/dev-runner/` 到新项目，用 `claude plugin list` 确认显示 `dev-runner@skills-dir`（Scope 为 project）。
+9. 确认 `.gitignore` 已忽略 `node_modules`、`.env`、`*.db` 和构建产物，然后提交一次。
 
 ## 硬性要求
 
 - 细节一律以参考项目的 `AGENTS.md` 和实际代码为准；与用户明确要求冲突时，以用户要求为准。
 - 不复制与用户业务无关的页面、模型和脚本。
 - 不提交真实密钥、数据库文件或 `.env`。
+- 复制参考项目的 `.claude/skills/dev-runner/` 插件。
 - 不在新项目中复制 `QUICK-PROMPT.md` 或 `PROMPT-GUIDE.md`。
 - 界面文案使用中文。
 

@@ -1,0 +1,6 @@
+{
+  "name": "dev-runner",
+  "version": "0.1.0",
+  "description": "Show a run/stop button above the prompt in npm projects (Claude Code CLI only)",
+  "types": "./types/index.d.ts"
+}

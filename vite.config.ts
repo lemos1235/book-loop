@@ -4,11 +4,11 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   server: {
-    host: '127.0.0.1',
-    port: 15174,
+    host: 'localhost',
+    port: 15173,
   },
   preview: {
-    port: 15174,
+    port: 15173,
   },
   // bits-ui 以 .svelte 源码分发，服务端必须打包而不是交给 Node 直接 import
   ssr: {
